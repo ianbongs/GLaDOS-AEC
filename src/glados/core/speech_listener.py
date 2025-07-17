@@ -153,7 +153,7 @@ class SpeechListener:
 
         if vad_confidence:
             if not self.interruptible and self.currently_speaking_event.is_set():
-                logger.info("Interruption is disabled, and the assistant is currently speaking, ignoring new input.")
+                logger.debug(f"Detected voice activity but interruptibility is disabled: {self.interruptible=}, {self.currently_speaking_event.is_set()=}")
                 return
 
             self.audio_io.stop_speaking()
