@@ -87,12 +87,14 @@ class SpeechPlayer:
                             }
                         )
                         assistant_text_accumulator = []  # Reset accumulator
-                        self.currently_speaking_event.clear()
                         self._clear_audio_queue()
 
                     else:  # Playback completed normally
                         logger.success(f"AudioPlayer: Playback completed for: '{audio_msg.text}'")
                         assistant_text_accumulator.append(audio_msg.text)
+                        
+                    self.currently_speaking_event.clear()
+    
                 else:
                     logger.warning(f"AudioPlayer: Received empty audio message or no text: {audio_len, audio_msg}")
 
