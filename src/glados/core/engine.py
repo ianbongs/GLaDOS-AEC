@@ -78,6 +78,7 @@ class GladosConfig(BaseModel):
     voice: str
     announcement: str | None
     personality_preprompt: list[PersonalityPrompt]
+    aec_enabled: bool = False  # <-- ADD THIS
 
     @classmethod
     def from_yaml(cls, path: str | Path, key_to_config: tuple[str, ...] = ("Glados",)) -> "GladosConfig":
@@ -149,6 +150,7 @@ class Glados:
         wake_word: str | None = None,
         announcement: str | None = None,
         personality_preprompt: tuple[dict[str, str], ...] = DEFAULT_PERSONALITY_PREPROMPT,
+        aec_enabled: bool = False,  # NEW
     ) -> None:
         """
         Initialize the Glados voice assistant with configuration parameters.
@@ -178,7 +180,9 @@ class Glados:
         self.interruptible = interruptible
         self.wake_word = wake_word
         self.announcement = announcement
+        self.aec_enabled = aec_enabled  # 🆕 ADD THIS
         self._messages: list[dict[str, str]] = list(personality_preprompt)
+        
 
         # Initialize spoken text converter, that converts text to spoken text. eg. 12 -> "twelve"
         self._stc = stc.SpokenTextConverter()
@@ -199,6 +203,7 @@ class Glados:
         # Initialize audio input/output system
         self.audio_io: AudioProtocol = audio_io
         logger.info("Audio input started successfully.")
+        logger.info(f"AEC Enabled: {self.aec_enabled}")  # 🆕 ADD THIS
 
         # Initialize threads for each component
         self.component_threads: list[threading.Thread] = []
@@ -309,7 +314,10 @@ class Glados:
         tts_model: SpeechSynthesizerProtocol
         tts_model = get_speech_synthesizer(config.voice)
 
-        audio_io = get_audio_system(backend_type=config.audio_io)
+        audio_io = get_audio_system(
+            backend_type=config.audio_io,
+            aec_enabled=config.aec_enabled  # ✅ forward the flag here
+        )
 
         return cls(
             asr_model=asr_model,
@@ -322,6 +330,7 @@ class Glados:
             wake_word=config.wake_word,
             announcement=config.announcement,
             personality_preprompt=tuple(config.to_chat_messages()),
+            aec_enabled=config.aec_enabled,  # 🆕 ADD THIS
         )
 
     @classmethod

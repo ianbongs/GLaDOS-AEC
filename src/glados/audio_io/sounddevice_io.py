@@ -8,6 +8,7 @@ from numpy.typing import NDArray
 import sounddevice as sd  # type: ignore
 
 from . import VAD
+from ..utils.pyaec_wrapper import PyaecEchoCanceller  # Add at top
 
 
 class SoundDeviceAudioIO:
@@ -22,7 +23,7 @@ class SoundDeviceAudioIO:
     VAD_SIZE: int = 32  # Milliseconds of sample for Voice Activity Detection (VAD)
     VAD_THRESHOLD: float = 0.8  # Threshold for VAD detection
 
-    def __init__(self, vad_threshold: float | None = None) -> None:
+    def __init__(self, vad_threshold: float | None = None, aec_enabled: bool = False) -> None:
         """Initialize the sounddevice audio I/O.
 
         Args:
@@ -42,11 +43,18 @@ class SoundDeviceAudioIO:
 
         self._vad_model = VAD()
 
+        # ✅ INSERT HERE
+        self._aec_enabled = aec_enabled
+        self._aec = PyaecEchoCanceller() if self._aec_enabled else None
+        logger.info(f"Echo cancellation {'ENABLED' if self._aec_enabled else 'DISABLED'}.")
+
         self._sample_queue: queue.Queue[tuple[NDArray[np.float32], bool]] = queue.Queue()
         self.input_stream: sd.InputStream | None = None
         self._is_playing = False
         self._playback_thread = None
         self._stop_event = threading.Event()
+        # 👇 Add this line to initialize VAD rolling buffer
+        self._vad_buffer = np.zeros(0, dtype=np.float32)
 
     def start_listening(self) -> None:
         """Start capturing audio from the system microphone.
@@ -86,8 +94,24 @@ class SoundDeviceAudioIO:
                 logger.debug(f"Audio callback status: {status}")
 
             data = np.array(indata).copy().squeeze()  # Reduce to single channel if necessary
-            vad_value = self._vad_model(np.expand_dims(data, 0))
-            vad_confidence = vad_value > self.vad_threshold
+
+            # Apply AEC to mic input
+            if self._aec_enabled and self._aec:
+                data = self._aec.cancel(data)
+
+            # --- VAD Rolling Buffer Logic ---
+            self._vad_buffer = np.concatenate([self._vad_buffer, data])
+
+            if len(self._vad_buffer) >= 512:
+                vad_input = self._vad_buffer[:512]  # 512 samples = 32ms at 16kHz
+                self._vad_buffer = self._vad_buffer[160:]  # Slide forward by 10ms
+
+                vad_value = self._vad_model(np.expand_dims(vad_input, 0))
+                vad_confidence = vad_value > self.vad_threshold
+            else:
+                vad_confidence = False
+
+            # Always queue the latest chunk (even if VAD not triggered)
             self._sample_queue.put((data, bool(vad_confidence)))
 
         try:
@@ -142,6 +166,11 @@ class SoundDeviceAudioIO:
         self._stop_event.clear()
 
         logger.debug(f"Playing audio with sample rate: {sample_rate} Hz, length: {len(audio_data)} samples")
+        
+        # Send echo reference frame to AEC
+        if self._aec_enabled and self._aec:
+            self._aec.update_echo_reference(audio_data[:160])  # 10ms frame
+    
         self._is_playing = True
         sd.play(audio_data, sample_rate)
 

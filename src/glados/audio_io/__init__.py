@@ -35,7 +35,7 @@ class AudioProtocol(Protocol):
 
 
 # Factory function
-def get_audio_system(backend_type: str = "sounddevice", vad_threshold: float | None = None) -> AudioProtocol:
+def get_audio_system(backend_type: str = "sounddevice", vad_threshold: float | None = None, aec_enabled: bool = False) -> AudioProtocol:
     """
     Factory function to get an instance of an audio I/O system based on the specified backend type.
 
@@ -56,6 +56,7 @@ def get_audio_system(backend_type: str = "sounddevice", vad_threshold: float | N
 
         return SoundDeviceAudioIO(
             vad_threshold=vad_threshold,
+            aec_enabled=aec_enabled,  # ✅ Forward it to the backend class
         )
     elif backend_type == "websocket":
         raise ValueError("WebSocket audio backend is not yet implemented.")
